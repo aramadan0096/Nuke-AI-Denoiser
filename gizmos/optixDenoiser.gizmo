@@ -1,0 +1,229 @@
+#! C:/Program Files/Nuke12.2v2/nuke-12.2.2.dll -nx
+version 12.2 v2
+add_layer {albedo albedo.red albedo.green albedo.blue}
+add_layer {N N.red N.green N.blue N.X N.Y N.Z}
+add_layer {motionvector motionvector.red motionvector.green motionvector.blue}
+Gizmo {
+ name OptixDenoiser
+ knobChanged "# Get the parent node of the knob that was changed.\nnode = nuke.thisNode()\n\n# Define the checkbox knob we will use to control others.\n# Replace 'myCheckbox' with the actual name of your checkbox knob.\nalbedokbox_knob = node.knob('albedoEnabled')\nnormalskbox_knob = node.knob('normalsEnable')\nmvbox_knob = node.knob('mvEnabled')\n# Define the list of knobs to be enabled/disabled.\n# Replace 'knob1', 'knob2', etc., with the actual names of your knobs.\nknobs_to_control = \['normalsEnable', 'mvEnabled']\n\nif nuke.thisKnob()==albedokbox_knob:\n\n    is_checked = albedokbox_knob.value()\n    node.knob('in_2').setEnabled(is_checked)\n    node.knob('in_1').setEnabled(is_checked)\n    node.knob('in_3').setEnabled(is_checked)\n    node.knob('preDenoised').setEnabled(is_checked)\n    # Iterate through the list of knobs to control.\n    for knob_name in knobs_to_control:\n        # Get the knob object by its name.\n        control_knob = node.knob(knob_name)\n\n        # Check if the knob exists on the node.\n        if control_knob:\n            # Set the knob to be enabled or disabled based on the checkbox value.\n            control_knob.setValue(is_checked)\n            control_knob.setEnabled(is_checked)\n\n\nif nuke.thisKnob()==normalskbox_knob:\n    n_is_checked = normalskbox_knob.value()\n    node.knob('in_1').setEnabled(n_is_checked)\n    \nif nuke.thisKnob()==mvbox_knob:\n    mv_is_checked = mvbox_knob.value()\n    node.knob('in_3').setEnabled(mv_is_checked)"
+ tile_color 0x457c00ff
+ addUserKnob {20 User l Denoiser}
+ addUserKnob {26 Gname l "" +STARTLINE T "AI CG Denoiser <font color=\"green\"><b>from Nvidia</b></font>"}
+ addUserKnob {26 text l "" +STARTLINE}
+ addUserKnob {4 view l View t "Chose viewer output" M {Input Beauty Albedo Normals Motionvector "" ""}}
+ view Beauty
+ addUserKnob {26 ""}
+ addUserKnob {41 in l Beauty t "Select beauty pass" T Beauty.in}
+ addUserKnob {41 in_2 l Albedo t "Select motionvector pass" T Albedo.in}
+ addUserKnob {6 albedoEnabled l Enable -STARTLINE}
+ albedoEnabled true
+ addUserKnob {41 in_1 l Normals t "Select Normals pass" T Normals.in}
+ addUserKnob {6 normalsEnable l Enable -STARTLINE}
+ normalsEnable true
+ addUserKnob {26 ""}
+ addUserKnob {2 out l "Output Location" t "Set render output location"}
+ addUserKnob {6 hdr l HDR -STARTLINE}
+ hdr true
+ addUserKnob {1 prefix l "Output Prefix" t "Set output prefix"}
+ addUserKnob {7 repeat l "Denoising iterations" R 1 10}
+ repeat 20
+ addUserKnob {7 blend l "Blend Ammount" t "Blend amount value from 0 to 1"}
+ addUserKnob {20 group l "Temporal denoising" n 1}
+ addUserKnob {41 in_3 l Motionvector t "Select motionvector pass" T Motionvector.in}
+ addUserKnob {6 mvEnabled l Enable -STARTLINE}
+ mvEnabled true
+ addUserKnob {2 preDenoised l Pre-denoised t "Set previous denoised render path"}
+ addUserKnob {20 endGroup n -1}
+ addUserKnob {26 ""}
+ addUserKnob {22 read l Denoise T "import os\nimport subprocess\nimport nuke\n\nfristFrame = int(nuke.Root()\['first_frame'].value())\nlastFrame = int(nuke.Root()\['last_frame'].value())\nframeRange = str(fristFrame) + '-' + str(lastFrame)\nret = nuke.getFramesAndViews('Frame range', frameRange)\nrange = ret\[0]\nrange = range.split('-')\nfristRenderFrame = int(range\[0])\nlastRenderFrame = int(range\[1])\nprint('first frame is: ' + str(fristRenderFrame))\nprint('last frame is: ' + str(lastRenderFrame))\n\nnode = nuke.thisNode()\nsearch_path = node\['out'].value()\nprint(search_path)\nrgb_path = os.path.join(search_path, 'rgb')\nnormal_path = os.path.join(search_path, 'normals')\nalbedo_path = os.path.join(search_path, 'albedo')\nmotionvector_path = os.path.join(search_path, 'motionvector')\noutput_dir = os.path.join(search_path, 'denoised')\n\nprint('search_path is: ' + search_path)\nprint('normal_path is: ' + normal_path)\nprint('albedo_path is: ' + albedo_path)\nprint('motionvector_path is: ' + motionvector_path)\nprint('output_dir is: ' + output_dir)\n\n# Create output directory if it doesn't exist\nif not os.path.exists(output_dir):\n    os.makedirs(output_dir)\n\nrepeat = int(node\['repeat'].value())\nblend_amount = str(node\['blend'].value())\nuse_hdr = str(int(node\['hdr'].value()))\n# Read knob value safely (avoid passing a Knob/None into subprocess)\npre_knob = node.knob('preDenoised_path')\npreDenoised_path = pre_knob.value() if pre_knob else ''\n#path_to_denoiser = r'D:\\tools\\Optix\\denoisr_bin9'\npath_to_denoiser = node\['binPath'].value()\noutput_prefix = 'denoised_'\ndenoiser_exe = os.path.join(path_to_denoiser, 'Denoiser.exe')\n\nprint('repeat is: ' + str(repeat))\nprint('blend_amount is: ' + blend_amount)\nprint('use_hdr is: ' + use_hdr)\n\n# Basic sanity check for the denoiser binary\nif not os.path.isfile(denoiser_exe):\n    nuke.message('Denoiser not found: \{\}'.format(denoiser_exe))\n    raise RuntimeError('Missing denoiser exe at \{\}'.format(denoiser_exe))\n\nfile_extension = 'exr'\nwriteNodes = \['Write_Beauty','Write_Albedo','Write_Normals','Write_Motionvector']\nwriteList = \[]\nwith nuke.toNode(node.name()):\n    for n in nuke.allNodes():\n        if n.name() in writeNodes:\n            writeList.append(n)\n\n    nuke.executeMultiple(writeList, ((fristRenderFrame, lastRenderFrame, 1), (fristRenderFrame, lastRenderFrame, 1), (fristRenderFrame, lastRenderFrame, 1), (fristRenderFrame, lastRenderFrame, 1)))\n\n\n##########\n# DENOISE\n##########\n\nfor root, _, files in os.walk(search_path):\n    if os.path.basename(root) != 'rgb':\n        continue  # Only process the RGB directory\n\n    for file in files:\n        if file.startswith('rgb.') and file.endswith('.exr'):\n            # Input RGB file\n            input_file = os.path.join(root, file)\n\n            # Output file in denoised directory\n            output_file = os.path.join(\n                output_dir,\n                (output_prefix) + (file.replace('rgb.', 'rgb_', 1))\n            )\n\n            # Find corresponding albedo/normal/motion-vector frames\n            frame_part = file.split('.')\[1]  # Extract the #### part\n            albedo_file = 'albedo.\{\}.\{\}'.format(frame_part, file_extension)\n            normals_file = 'normals.\{\}.\{\}'.format(frame_part, file_extension)\n            mv_file = 'motionvector.\{\}.\{\}'.format(frame_part, file_extension)\n\n            albedo_frame_path = os.path.join(search_path, 'albedo', albedo_file)\n            normals_frame_path = os.path.join(search_path, 'normals', normals_file)\n            mv_frame_path = os.path.join(search_path, 'motionvector', mv_file)\n\n            # Build the denoiser command (only include optional inputs if they exist)\n            cmd = \[\n                str(denoiser_exe),\n                '-i', str(input_file),\n                '-o', str(output_file),\n                '-hdr', str(use_hdr),\n                '-blend', str(blend_amount),\n                '-repeat', str(repeat),\n            ]\n\n            if os.path.exists(albedo_frame_path):\n                cmd.extend(\['-a', albedo_frame_path])\n            if os.path.exists(normals_frame_path):\n                cmd.extend(\['-n', normals_frame_path])\n            if os.path.exists(mv_frame_path):\n                cmd.extend(\['-mv', mv_frame_path])\n            if preDenoised_path:\n                cmd.extend(\['-pi', preDenoised_path])\n\n            FNULL = open(os.devnull, 'w')\n            subprocess.call(cmd, stdout=FNULL, stderr=FNULL)\n            nuke.tprint('Processed: \{\} -> \{\}'.format(input_file, output_file))\n\n\nprefix = node\['prefix'].value()\nif prefix == '':\n    prefix = prefix\nelse:\n    prefix = prefix + '_'\n\nn = nuke.selectedNode()\ntopnode_name = nuke.tcl(\"full_name \[topnode %s]\" % n.name())\ntopnode = nuke.toNode(topnode_name)\nfilename = os.path.basename(topnode\['file'].value())\nfilename = prefix + filename\n# denoisedRender = os.path.join(output_dir, 'denoised_rgb_%04d.exr')\ndenoisedRender = os.path.join(output_dir, filename)\ndenoisedRender = denoisedRender.replace('\\\\','/')\nread = nuke.nodes.Read(file=denoisedRender, colorspace='scene_linear', first=fristRenderFrame, last=lastRenderFrame)\n\nselectX = node.xpos()\nselectY = node.ypos()\n\nread.setXpos(selectX)\nread.setYpos(selectY + 100)\n\nnuke.message('Denoising process completed.')" +STARTLINE}
+ addUserKnob {20 bin}
+ addUserKnob {2 binPath l "Bin Path"}
+}
+ Input {
+  inputs 0
+  name Input1
+  xpos -260
+  ypos -345
+ }
+ Dot {
+  name Dot7
+  xpos -226
+  ypos -294
+ }
+set Nc3ccc800 [stack 0]
+ Dot {
+  name Dot1
+  xpos -226
+  ypos -246
+ }
+set Nc3ccc400 [stack 0]
+ Dot {
+  name Dot9
+  xpos -116
+  ypos -246
+ }
+set Nc25efc00 [stack 0]
+ Dot {
+  name Dot10
+  xpos -6
+  ypos -246
+ }
+ Shuffle {
+  in motionvector
+  name Motionvector
+  xpos -40
+  ypos -177
+ }
+ Remove {
+  operation keep
+  channels rgba
+  name Remove4
+  xpos -40
+  ypos -129
+ }
+ Write {
+  channels rgba
+  file "\[value parent.out]motionvector/motionvector.####.exr"
+  file_type exr
+  write_ACES_compliant_EXR true
+  first_part rgba
+  create_directories true
+  version 32
+  name Write_Motionvector
+  label "\[value file]"
+  selected true
+  xpos -40
+  ypos -87
+  disable {{!parent.mvEnabled}}
+ }
+ Dot {
+  name Dot11
+  xpos -6
+  ypos 18
+ }
+push $Nc25efc00
+ Shuffle {
+  in {N.red N.green N.blue -N.X}
+  name Normals
+  xpos -150
+  ypos -177
+ }
+ Remove {
+  operation keep
+  channels rgba
+  name Remove3
+  xpos -150
+  ypos -129
+ }
+ Write {
+  channels rgba
+  file "\[value parent.out]normals/normals.####.exr"
+  file_type exr
+  write_ACES_compliant_EXR true
+  first_part rgba
+  create_directories true
+  version 38
+  name Write_Normals
+  label "\[value file]"
+  xpos -150
+  ypos -87
+  disable {{!parent.normalsEnable}}
+ }
+ Dot {
+  name Dot5
+  xpos -116
+  ypos 18
+ }
+push $Nc3ccc400
+ Shuffle {
+  in {albedo.red -albedo.green -albedo.blue}
+  name Albedo
+  xpos -260
+  ypos -177
+ }
+ Remove {
+  operation keep
+  channels rgba
+  name Remove2
+  xpos -260
+  ypos -129
+ }
+ Write {
+  channels rgba
+  file "\[value parent.out]albedo/albedo.####.exr"
+  file_type exr
+  write_ACES_compliant_EXR true
+  first_part rgba
+  create_directories true
+  version 38
+  name Write_Albedo
+  label "\[value file]"
+  xpos -260
+  ypos -88
+  disable {{!parent.albedoEnabled x1025 0}}
+ }
+ Dot {
+  name Dot6
+  xpos -226
+  ypos 18
+ }
+push $Nc3ccc400
+ Dot {
+  name Dot8
+  xpos -336
+  ypos -246
+ }
+ Shuffle {
+  name Beauty
+  xpos -370
+  ypos -177
+ }
+ Remove {
+  operation keep
+  channels rgba
+  name Remove1
+  xpos -370
+  ypos -129
+ }
+ Write {
+  channels rgba
+  file "\[value parent.out]rgb/rgb.####.exr"
+  file_type exr
+  write_ACES_compliant_EXR true
+  first_part rgba
+  create_directories true
+  version 38
+  name Write_Beauty
+  label "\[value file]"
+  xpos -370
+  ypos -87
+ }
+ Dot {
+  name Dot4
+  xpos -336
+  ypos 18
+ }
+push $Nc3ccc800
+ Dot {
+  name Dot2
+  xpos -446
+  ypos -294
+ }
+ Dot {
+  name Dot3
+  xpos -446
+  ypos 90
+ }
+ Switch {
+  inputs 5
+  which {{parent.view}}
+  name outSwitch
+  xpos -260
+  ypos 87
+ }
+ Output {
+  name Output1
+  xpos -260
+  ypos 159
+ }
+end_group

@@ -1,3 +1,4 @@
 import nuke
-nuke.pluginAddPath( './imgs')
-nuke.pluginAddPath( './scripts')
+
+nuke.pluginAddPath('./gizmos')
+nuke.pluginAddPath('./gizmos/imgs')
